@@ -1,0 +1,337 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
+
+using namespace std;
+
+struct B {
+    string t;   // название
+    string a;   // автор
+    string g;   // жанр
+    int y = 0;  // год
+    string d;   // описание
+    bool f = false; // избранное
+    bool r = false; // прочитана
+};
+
+vector<B> v;
+string fn = "lib.txt";
+
+string escape_pipe(const string& s) {
+    string res = s;
+    size_t pos = 0;
+    while ((pos = res.find('|', pos)) != string::npos) {
+        res.replace(pos, 1, "\\|");
+        pos += 2;
+    }
+    return res;
+}
+
+string unescape_pipe(const string& s) {
+    string res = s;
+    size_t pos = 0;
+    while ((pos = res.find("\\|", pos)) != string::npos) {
+        res.replace(pos, 2, "|");
+        pos += 1;
+    }
+    return res;
+}
+
+void sv() {
+    ofstream f(fn);
+    if (!f) {
+        cout << "Ошибка: не удалось открыть файл для записи!\n";
+        return;
+    }
+    for (const auto& b : v) {
+        f << escape_pipe(b.t) << "|"
+            << escape_pipe(b.a) << "|"
+            << escape_pipe(b.g) << "|"
+            << b.y << "|"
+            << escape_pipe(b.d) << "|"
+            << (b.f ? "1" : "0") << "|"
+            << (b.r ? "1" : "0") << "\n";
+    }
+    f.close();
+}
+
+void ld() {
+    ifstream f(fn);
+    if (!f) return;  // файла ещё нет — нормально
+
+    v.clear();
+    string line;
+    while (getline(f, line)) {
+        if (line.empty()) continue;
+
+        vector<string> fields;
+        size_t start = 0;
+        for (size_t i = 0; i <= line.size(); ++i) {
+            if (i == line.size() || line[i] == '|') {
+                string field = line.substr(start, i - start);
+                fields.push_back(unescape_pipe(field));
+                start = i + 1;
+            }
+        }
+
+        if (fields.size() < 5) continue;  // минимум название, автор, жанр, год, описание
+
+        B b;
+        b.t = fields[0];
+        b.a = fields[1];
+        b.g = fields[2];
+        try {
+            b.y = stoi(fields[3]);
+        }
+        catch (...) {
+            b.y = 0;
+        }
+        b.d = fields[4];
+        b.f = (fields.size() > 5 && fields[5] == "1");
+        b.r = (fields.size() > 6 && fields[6] == "1");
+
+        v.push_back(b);
+    }
+    f.close();
+}
+
+void ad() {
+    cout << "\n--- Добавление книги ---\n";
+    B b;
+    cout << "Название: ";    getline(cin, b.t);
+    cout << "Автор: ";       getline(cin, b.a);
+    cout << "Жанр: ";        getline(cin, b.g);
+
+    string ys;
+    cout << "Год издания: "; getline(cin, ys);
+    try {
+        b.y = stoi(ys);
+    }
+    catch (...) {
+        cout << "Некорректный год → установлен 0\n";
+        b.y = 0;
+    }
+
+    cout << "Краткое описание: "; getline(cin, b.d);
+
+    if (b.t.empty() || b.a.empty()) {
+        cout << "Название и автор обязательны! Книга не добавлена.\n";
+        return;
+    }
+
+    v.push_back(b);
+    sv();
+    cout << "Книга добавлена.\n";
+}
+
+void ls() {
+    if (v.empty()) {
+        cout << "\nБиблиотека пуста.\n";
+        return;
+    }
+
+    cout << "\n--- Список книг ---\n";
+    string fg, fs, sb;
+    cout << "Фильтр по жанру (Enter — без фильтра): "; getline(cin, fg);
+    cout << "Статус (прочитана / не прочитана / все / Enter): "; getline(cin, fs);
+    cout << "Сортировать по (название / автор / год / Enter=название): "; getline(cin, sb);
+
+    vector<B> w;
+    for (const auto& book : v) {
+        bool ok = true;
+        if (!fg.empty() && book.g != fg) ok = false;
+        if (fs == "прочитана" && !book.r) ok = false;
+        if (fs == "не прочитана" && book.r) ok = false;
+        if (ok) w.push_back(book);
+    }
+
+    if (w.empty()) {
+        cout << "Нет книг по заданному фильтру.\n";
+        return;
+    }
+
+    // Сортировка
+    if (sb == "автор") {
+        sort(w.begin(), w.end(), [](const B& x, const B& y) { return x.a < y.a; });
+    }
+    else if (sb == "год") {
+        sort(w.begin(), w.end(), [](const B& x, const B& y) { return x.y < y.y; });
+    }
+    else {  // название по умолчанию
+        sort(w.begin(), w.end(), [](const B& x, const B& y) { return x.t < y.t; });
+    }
+
+    for (size_t i = 0; i < w.size(); ++i) {
+        cout << (i + 1) << ". ";
+        if (w[i].f) cout << "★ ";
+        cout << w[i].t << " – " << w[i].a
+            << " (" << w[i].y << ") [" << w[i].g << "] – "
+            << (w[i].r ? "прочитана" : "не прочитана") << "\n";
+    }
+}
+
+void tf() {  // toggle favorite
+    if (v.empty()) { cout << "Нет книг.\n"; return; }
+
+    for (size_t i = 0; i < v.size(); ++i) {
+        cout << (i + 1) << ". ";
+        if (v[i].f) cout << "★ ";
+        cout << v[i].t << "\n";
+    }
+    cout << "Номер книги: ";
+    string ns; getline(cin, ns);
+    try {
+        int n = stoi(ns) - 1;
+        if (n >= 0 && n < static_cast<int>(v.size())) {
+            v[n].f = !v[n].f;
+            sv();
+            cout << (v[n].f ? "Добавлено в избранное" : "Убрано из избранного") << ".\n";
+        }
+        else {
+            cout << "Неверный номер.\n";
+        }
+    }
+    catch (...) {
+        cout << "Ошибка ввода номера.\n";
+    }
+}
+
+void tr() {  // toggle read
+    if (v.empty()) { cout << "Нет книг.\n"; return; }
+
+    for (size_t i = 0; i < v.size(); ++i) {
+        cout << (i + 1) << ". " << v[i].t
+            << (v[i].r ? " (прочитана)" : " (не прочитана)") << "\n";
+    }
+    cout << "Номер книги: ";
+    string ns; getline(cin, ns);
+    try {
+        int n = stoi(ns) - 1;
+        if (n >= 0 && n < static_cast<int>(v.size())) {
+            v[n].r = !v[n].r;
+            sv();
+            cout << (v[n].r ? "Отмечено как прочитана" : "Отмечено как не прочитана") << ".\n";
+        }
+        else {
+            cout << "Неверный номер.\n";
+        }
+    }
+    catch (...) {
+        cout << "Ошибка ввода номера.\n";
+    }
+}
+
+void sf() {
+    cout << "\n--- Избранные книги ---\n";
+    bool any = false;
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (v[i].f) {
+            any = true;
+            cout << (i + 1) << ". " << v[i].t << " – " << v[i].a << "\n";
+        }
+    }
+    if (!any) cout << "Избранных книг пока нет.\n";
+}
+
+void db() {
+    if (v.empty()) { cout << "Нет книг.\n"; return; }
+
+    for (size_t i = 0; i < v.size(); ++i) {
+        cout << (i + 1) << ". " << v[i].t << "\n";
+    }
+    cout << "Номер для удаления: ";
+    string ns; getline(cin, ns);
+    try {
+        int n = stoi(ns) - 1;
+        if (n >= 0 && n < static_cast<int>(v.size())) {
+            cout << "Удалить \"" << v[n].t << "\"? (да / нет): ";
+            string confirm; getline(cin, confirm);
+            if (confirm == "да" || confirm == "y" || confirm == "yes") {
+                v.erase(v.begin() + n);
+                sv();
+                cout << "Книга удалена.\n";
+            }
+            else {
+                cout << "Удаление отменено.\n";
+            }
+        }
+        else {
+            cout << "Неверный номер.\n";
+        }
+    }
+    catch (...) {
+        cout << "Ошибка ввода номера.\n";
+    }
+}
+
+void sr() {
+    cout << "Ключевое слово для поиска: ";
+    string kw; getline(cin, kw);
+    if (kw.empty()) return;
+
+    vector<B> found;
+    for (const auto& b : v) {
+        if (b.t.find(kw) != string::npos ||
+            b.a.find(kw) != string::npos ||
+            b.g.find(kw) != string::npos ||
+            b.d.find(kw) != string::npos) {
+            found.push_back(b);
+        }
+    }
+
+    if (found.empty()) {
+        cout << "Ничего не найдено.\n";
+        return;
+    }
+
+    cout << "\n--- Найденные книги ---\n";
+    for (size_t i = 0; i < found.size(); ++i) {
+        cout << (i + 1) << ". " << found[i].t << " – " << found[i].a << "\n";
+    }
+}
+
+int main() {
+#ifdef _WIN32
+    system("chcp 65001 > nul");  // UTF-8
+#endif
+    ld();
+
+    int c;
+    do {
+        cout << "\n========== Т-Библиотека ==========\n";
+        cout << "Книг в библиотеке: " << v.size() << "\n\n";
+        cout << "1. Добавить книгу\n";
+        cout << "2. Показать книги (с фильтром и сортировкой)\n";
+        cout << "3. Избранное (добавить/убрать)\n";
+        cout << "4. Изменить статус «прочитано»\n";
+        cout << "5. Показать избранные\n";
+        cout << "6. Удалить книгу\n";
+        cout << "7. Поиск по ключевому слову\n";
+        cout << "0. Выход\n";
+        cout << "→ ";
+
+        if (!(cin >> c)) {
+            cin.clear();
+            c = -1;
+        }
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        switch (c) {
+        case 1: ad(); break;
+        case 2: ls(); break;
+        case 3: tf(); break;
+        case 4: tr(); break;
+        case 5: sf(); break;
+        case 6: db(); break;
+        case 7: sr(); break;
+        case 0: cout << "До свидания!\n"; break;
+        default: cout << "Неверный выбор.\n";
+        }
+    } while (c != 0);
+
+    return 0;
+}
